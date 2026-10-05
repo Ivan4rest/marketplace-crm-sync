@@ -1,0 +1,20 @@
+name: tests
+on: [push, pull_request]
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest
+      - name: End-to-end run against the mock services
+        run: |
+          uvicorn mock_services.app:app &
+          for i in $(seq 1 30); do curl -sf localhost:8000/crm/deals && break; sleep 1; done
+          python -m ordersync
+          curl -sf -X POST localhost:8000/demo/advance
+          python -m ordersync
+          curl -sf localhost:8000/crm/deals | python -c "import sys,json; d=json.load(sys.stdin)['deals']; assert len(d)==4, d; assert sum(x['stage']=='Оплачен' for x in d)==3, d"
